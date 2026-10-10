@@ -889,6 +889,63 @@ function NugEnergy:SetupEditMode()
     LEM:AddFrame(self, function(frame, layoutName, point, x, y)
         frame:SavePosition(point, x, y)
     end, { point = "CENTER", x = 0, y = 0 })
+
+    -- Geometry settings shown in the Edit Mode dialog. These edit the same
+    -- profile values as /nen gui; only the position is per layout.
+    local function slider(name, key, minValue, maxValue, valueStep, apply, formatter)
+        return {
+            name = name,
+            kind = LEM.SettingType.Slider,
+            default = defaults.profile[key],
+            get = function() return NugEnergy.db.profile[key] end,
+            set = function(_, value)
+                NugEnergy.db.profile[key] = tonumber(value)
+                if apply then apply(NugEnergy) end
+            end,
+            minValue = minValue,
+            maxValue = maxValue,
+            valueStep = valueStep,
+            formatter = formatter,
+        }
+    end
+    local function percent(value)
+        return math.floor(value * 100 + 0.5) .. "%"
+    end
+
+    LEM:AddFrameSettings(self, {
+        slider(L"Width", "width", 30, 600, 1, NugEnergy.Resize),
+        slider(L"Height", "height", 10, 100, 1, NugEnergy.Resize),
+        slider(L"Out of Combat Alpha", "outOfCombatAlpha", 0, 1, 0.05, nil, percent),
+        { name = L"Text", kind = LEM.SettingType.Divider },
+        {
+            name = L"Hide Text",
+            kind = LEM.SettingType.Checkbox,
+            default = defaults.profile.hideText,
+            get = function() return NugEnergy.db.profile.hideText end,
+            set = function(_, value)
+                NugEnergy.db.profile.hideText = value
+                NugEnergy:ResizeText()
+            end,
+        },
+        {
+            name = L"Text Align",
+            kind = LEM.SettingType.Dropdown,
+            default = defaults.profile.textAlign,
+            values = {
+                { text = L"START", value = "START" },
+                { text = L"CENTER", value = "CENTER" },
+                { text = L"END", value = "END" },
+            },
+            get = function() return NugEnergy.db.profile.textAlign end,
+            set = function(_, value)
+                NugEnergy.db.profile.textAlign = value
+                NugEnergy:Resize()
+            end,
+        },
+        slider(L"Font Size", "fontSize", 5, 80, 1, NugEnergy.ResizeText),
+        slider(L"Text Offset X", "textOffsetX", -50, 50, 1, NugEnergy.Resize),
+        slider(L"Text Offset Y", "textOffsetY", -50, 50, 1, NugEnergy.Resize),
+    })
 end
 
 
