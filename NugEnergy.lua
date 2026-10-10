@@ -26,6 +26,7 @@ NugEnergy:SetScript("OnEvent", function(self, event, ...)
 end)
 
 local LSM = LibStub("LibSharedMedia-3.0")
+local LEM = LibStub("LibEditMode", true)
 
 LSM:Register("statusbar", "Glamour7", [[Interface\AddOns\NugEnergy\statusbar.tga]])
 LSM:Register("statusbar", "Glamour7NoArt", [[Interface\AddOns\NugEnergy\statusbar3.tga]])
@@ -59,6 +60,7 @@ local math_max = math.max
 local PowerFilter
 local PowerTypeIndex
 local ForcedToShow
+local inEditMode
 local GetPower = function() return 0,0,0 end
 local GetPowerMax-- = UnitPowerMax
 
@@ -100,6 +102,7 @@ local defaults = {
     profile = {
         point = "CENTER",
         x = 0, y = 0,
+        editModeLayouts = {},
         marks = {},
         focus = true,
         rage = true,
@@ -355,7 +358,7 @@ function NugEnergy:UpdateVisibility()
     upvalueInCombat = inCombat
     if (inCombat or
         ((class == "ROGUE" or class == "DRUID") and IsStealthed()) or
-        ForcedToShow)
+        ForcedToShow or inEditMode)
         and PowerFilter
     then
         -- self:UNIT_MAXPOWER()
@@ -797,7 +800,7 @@ function NugEnergy.Create(self)
         text:Show()
     end
 
-    self:SetPoint(NugEnergy.db.profile.point, UIParent, NugEnergy.db.profile.point, NugEnergy.db.profile.x, NugEnergy.db.profile.y)
+    self:ApplyPosition()
 
     local oocA = NugEnergy.db.profile.outOfCombatAlpha
     if oocA > 0 then
@@ -809,12 +812,83 @@ function NugEnergy.Create(self)
     self:EnableMouse(false)
     self:RegisterForDrag("LeftButton")
     self:SetMovable(true)
-    self:SetScript("OnDragStart",function(self) self:StartMoving() end)
+    self:SetScript("OnDragStart",function(self) self:SetMovable(true); self:StartMoving() end)
     self:SetScript("OnDragStop",function(self)
         self:StopMovingOrSizing();
-        local _
-        _,_, NugEnergy.db.profile.point, NugEnergy.db.profile.x, NugEnergy.db.profile.y = self:GetPoint(1)
+        local point, _, _, x, y = self:GetPoint(1)
+        self:SavePosition(point, x, y)
     end)
+
+    self:SetupEditMode()
+end
+
+-- Position is stored per Edit Mode layout inside the profile. A layout
+-- without its own entry falls back to the legacy profile.point/x/y, so
+-- existing users keep their placement and new layouts inherit it.
+-- Without the lib (or before layouts are loaded) the legacy fields are used.
+function NugEnergy:GetPosition()
+    local profile = self.db.profile
+    local layoutName = LEM and LEM:GetActiveLayoutName()
+    return (layoutName and profile.editModeLayouts[layoutName]) or profile
+end
+
+function NugEnergy:ApplyPosition()
+    local pos = self:GetPosition()
+    self:ClearAllPoints()
+    self:SetPoint(pos.point, UIParent, pos.point, pos.x, pos.y)
+end
+
+function NugEnergy:SavePosition(point, x, y)
+    local profile = self.db.profile
+    local layoutName = LEM and LEM:GetActiveLayoutName()
+    local pos = profile
+    if layoutName then
+        pos = profile.editModeLayouts[layoutName]
+        if not pos then
+            pos = {}
+            profile.editModeLayouts[layoutName] = pos
+        end
+    end
+    pos.point, pos.x, pos.y = point, x, y
+end
+
+function NugEnergy:SetupEditMode()
+    if not LEM then return end
+
+    -- callbacks first: AddFrame may fire "layout" right away
+    LEM:RegisterCallback("enter", function()
+        inEditMode = true
+        NugEnergy:UpdateVisibility()
+    end)
+    LEM:RegisterCallback("exit", function()
+        inEditMode = nil
+        NugEnergy:UpdateVisibility()
+    end)
+    LEM:RegisterCallback("layout", function()
+        NugEnergy:ApplyPosition()
+    end)
+    LEM:RegisterCallback("create", function(layoutName, _, sourceLayoutName)
+        local layouts = NugEnergy.db.profile.editModeLayouts
+        local source = sourceLayoutName and layouts[sourceLayoutName]
+        if source and not layouts[layoutName] then
+            layouts[layoutName] = CopyTable(source)
+        end
+        NugEnergy:ApplyPosition() -- the game may already have switched to it
+    end)
+    LEM:RegisterCallback("rename", function(oldName, newName)
+        local layouts = NugEnergy.db.profile.editModeLayouts
+        if layouts[oldName] and not layouts[newName] then
+            layouts[newName] = layouts[oldName]
+        end
+        layouts[oldName] = nil
+    end)
+    LEM:RegisterCallback("delete", function(layoutName)
+        NugEnergy.db.profile.editModeLayouts[layoutName] = nil
+    end)
+
+    LEM:AddFrame(self, function(frame, layoutName, point, x, y)
+        frame:SavePosition(point, x, y)
+    end, { point = "CENTER", x = 0, y = 0 })
 end
 
 
@@ -875,7 +949,8 @@ NugEnergy.Commands = {
         NugEnergy:UPDATE_STEALTH()
     end,
     ["reset"] = function(v)
-        NugEnergy:SetPoint("CENTER",UIParent,"CENTER",0,0)
+        NugEnergy:SavePosition("CENTER", 0, 0)
+        NugEnergy:ApplyPosition()
     end,
     ["vertical"] = function(v)
         NugEnergy.db.profile.isVertical = not NugEnergy.db.profile.isVertical
