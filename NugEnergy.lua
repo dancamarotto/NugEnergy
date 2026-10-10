@@ -352,13 +352,23 @@ function NugEnergy.UPDATE_STEALTH(self, event, fromUpdateEnergy)
 end
 
 function NugEnergy:UpdateVisibility()
+    if inEditMode then
+        -- always shown while editing, even if disabled for the current spec,
+        -- so the bar can still be placed and sized
+        if PowerFilter then self:UpdateEnergy() end
+        self:StopHiding()
+        self:SetAlpha(1)
+        self:Show()
+        return
+    end
+
     if self.isDisabled then self:Hide(); return end
 
     local inCombat = UnitAffectingCombat("player")
     upvalueInCombat = inCombat
     if (inCombat or
         ((class == "ROGUE" or class == "DRUID") and IsStealthed()) or
-        ForcedToShow or inEditMode)
+        ForcedToShow)
         and PowerFilter
     then
         -- self:UNIT_MAXPOWER()
@@ -1706,7 +1716,7 @@ end
 function NugEnergy:Disable()
     -- GetComboPoints = dummy -- disable
     self.isDisabled = true
-    self:Hide()
+    self:UpdateVisibility()
 end
 
 function NugEnergy:Enable()
