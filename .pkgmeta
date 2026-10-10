@@ -11,3 +11,6 @@ externals:
   Libs/AceConfig-3.0: https://repos.wowace.com/wow/ace3/trunk/AceConfig-3.0
   Libs/LibSharedMedia-3.0: https://repos.wowace.com/wow/libsharedmedia-3-0/trunk/LibSharedMedia-3.0
 
+  Libs/LibEditMode:
+    url: https://github.com/p3lim-wow/LibEditMode
+    tag: latest
